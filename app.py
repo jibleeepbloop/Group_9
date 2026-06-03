@@ -811,11 +811,27 @@ LOGIN_HTML = f"""
 async function doLogin() {{
   const out = document.getElementById('out');
   out.className = 'msg';
-  const payload = {{ email: document.getElementById('loginEmail').value, password: document.getElementById('loginPass').value }};
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPass').value;
+  if (!email || !password) {{
+    out.className = 'msg error';
+    out.textContent = 'Please enter your email and password.';
+    return;
+  }}
+  const payload = {{ email: email, password: password }};
   try {{
     const res = await fetch('/api/login', {{ method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(payload) }});
     const data = await res.json();
-    if (!res.ok) throw data;
+    if (!res.ok) {{
+      // Handle FastAPI validation errors (422) where detail is an array
+      let msg = 'Something went wrong.';
+      if (typeof data.detail === 'string') {{
+        msg = data.detail;
+      }} else if (Array.isArray(data.detail) && data.detail.length > 0) {{
+        msg = data.detail[0].msg || 'Invalid input. Please check your email and password.';
+      }}
+      throw {{ detail: msg }};
+    }}
     localStorage.setItem('yosan_user', data.name);
     localStorage.setItem('yosan_role', data.role);
     if (data.role === 'user') {{
