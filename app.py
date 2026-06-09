@@ -6,7 +6,7 @@ import uvicorn
 import os
 from db import get_conn, generate_salt, hash_password, verify_password
 
-CCTV_FEED_BASE = "https://name-meat-yet-stage.trycloudflare.com/stream?key=praise-the-fool"
+CCTV_FEED_BASE = "https://merchants-centres-trace-pressure.trycloudflare.com/stream?key=praise-the-fool"
 CCTV_STREAM_PATH = "/stream?key=[stream-key]"
 
 def cctv_remote_url() -> str:
@@ -702,7 +702,7 @@ SIGNUP_HTML = """
       <div class="blob blob-1"></div>
       <div class="blob blob-2"></div>
       <div class="right-title">Welcome to<br>Yosan</div>
-      <p class="right-sub">Monitor your CCTV cameras with intelligent motion detection.</p>
+      <p class="right-sub">Monitor your CCTV cameras.</p>
       <div class="features">
         <div class="feature-item"><div class="feature-icon">🌐</div><span class="feature-text">Live CCTV Monitoring</span></div>
         <div class="feature-item"><div class="feature-icon">🎯</div><span class="feature-text">Motion Detection</span></div>
@@ -811,27 +811,11 @@ LOGIN_HTML = f"""
 async function doLogin() {{
   const out = document.getElementById('out');
   out.className = 'msg';
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPass').value;
-  if (!email || !password) {{
-    out.className = 'msg error';
-    out.textContent = 'Please enter your email and password.';
-    return;
-  }}
-  const payload = {{ email: email, password: password }};
+  const payload = {{ email: document.getElementById('loginEmail').value, password: document.getElementById('loginPass').value }};
   try {{
     const res = await fetch('/api/login', {{ method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(payload) }});
     const data = await res.json();
-    if (!res.ok) {{
-      // Handle FastAPI validation errors (422) where detail is an array
-      let msg = 'Something went wrong.';
-      if (typeof data.detail === 'string') {{
-        msg = data.detail;
-      }} else if (Array.isArray(data.detail) && data.detail.length > 0) {{
-        msg = data.detail[0].msg || 'Invalid input. Please check your email and password.';
-      }}
-      throw {{ detail: msg }};
-    }}
+    if (!res.ok) throw data;
     localStorage.setItem('yosan_user', data.name);
     localStorage.setItem('yosan_role', data.role);
     if (data.role === 'user') {{
@@ -1609,6 +1593,41 @@ ADMIN_HTML = f"""
     .filter-row {{ display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }}
     .filter-btn {{ padding: 5px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; background: transparent; color: rgba(255,255,255,0.4); font-family: 'DM Sans',sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }}
     .filter-btn.active {{ background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.4); color: #F59E0B; }}
+
+    /* ── Admin Camera view ── */
+    .cam-wrap {{ display: flex; flex-direction: column; align-items: center; gap: 1.2rem; }}
+    .cam-video-box {{
+      width: 100%; max-width: 720px; border-radius: 14px;
+      border: 2px solid rgba(245,158,11,0.35); background: #000; overflow: hidden;
+      box-shadow: 0 6px 28px rgba(0,0,0,0.5);
+      min-height: 200px; display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }}
+    .cam-placeholder {{ font-family: 'DM Sans', sans-serif; color: #F59E0B; font-size: 0.95rem; padding: 3rem; text-align: center; opacity: 0.6; }}
+    .motion-indicator {{
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.65); border-radius: 8px;
+      padding: 5px 12px; font-family: 'DM Sans', sans-serif;
+      font-size: 0.8rem; font-weight: 700; color: #fff; display: none;
+    }}
+    .motion-indicator.visible {{ display: block; }}
+    .motion-indicator.alert {{ background: rgba(220,38,38,0.85); animation: mpulse 1s infinite; }}
+    .motion-indicator.ok {{ background: rgba(5,150,105,0.85); }}
+    @keyframes mpulse {{ 0%,100% {{ opacity:1; }} 50% {{ opacity:0.6; }} }}
+    .cam-controls {{ display: flex; gap: 0.8rem; flex-wrap: wrap; justify-content: center; }}
+    .cam-btn {{
+      padding: 10px 22px; border-radius: 8px; border: none;
+      background: rgba(245,158,11,0.15); color: #F59E0B;
+      border: 1px solid rgba(245,158,11,0.35);
+      font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 700;
+      cursor: pointer; transition: all 0.15s;
+    }}
+    .cam-btn:hover {{ background: rgba(245,158,11,0.28); }}
+    .cam-btn-green {{ background: rgba(5,150,105,0.15); color: #34D399; border-color: rgba(52,211,153,0.35); }}
+    .cam-btn-green:hover {{ background: rgba(5,150,105,0.28); }}
+    .cam-btn-red {{ background: rgba(239,68,68,0.15); color: #FCA5A5; border-color: rgba(252,165,165,0.35); }}
+    .cam-btn-red:hover {{ background: rgba(239,68,68,0.28); }}
+    #adm-cam-status {{ font-family: 'DM Sans', sans-serif; font-size: 0.88rem; color: rgba(255,255,255,0.45); min-height: 1.4rem; font-weight: 500; }}
   </style>
 </head>
 <body>
@@ -1621,7 +1640,7 @@ ADMIN_HTML = f"""
     <div style="padding:0.8rem 0.4rem 0;">
       <button class="nav-item active" id="nav-users" onclick="showView('users')"><span class="nav-icon">👥</span> Users</button>
       <button class="nav-item" id="nav-logs" onclick="showView('logs')"><span class="nav-icon">🛡️</span> Login Logs</button>
-      <button class="nav-item" id="nav-motion" onclick="showView('motion')"><span class="nav-icon">🎯</span> Motion Events</button>
+      <button class="nav-item" id="nav-camera" onclick="showView('camera')"><span class="nav-icon">📷</span> Camera</button>
     </div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-logout">
@@ -1670,19 +1689,29 @@ ADMIN_HTML = f"""
       </div>
     </div>
 
-    <!-- Motion Events -->
-    <div class="view" id="view-motion">
+    <!-- Camera -->
+    <div class="view" id="view-camera">
       <div class="stats-row">
-        <div class="stat-card"><div class="stat-icon">🎯</div><div class="stat-label">Today</div><div class="stat-value" id="stat-motion-today">—</div></div>
-        <div class="stat-card"><div class="stat-icon">📊</div><div class="stat-label">Total</div><div class="stat-value" id="stat-motion-total">—</div></div>
+        <div class="stat-card"><div class="stat-icon">🔴</div><div class="stat-label">CCTV Status</div><div class="stat-value" id="adm-stat-cam" style="font-size:1.1rem;margin-top:8px;">Offline</div></div>
+        <div class="stat-card"><div class="stat-icon">🎥</div><div class="stat-label">CCTV Screen</div><div class="stat-value" id="adm-stat-motion" style="font-size:1.1rem;margin-top:8px;">—</div></div>
       </div>
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Motion Detection Log</span>
-          <button class="btn btn-amber" onclick="loadMotion()">↻ Refresh</button>
+
+      <div class="panel cam-wrap">
+        <div class="cam-video-box" id="adm-cam-box">
+          <div class="cam-placeholder" id="adm-cam-placeholder">🎥<br><br>Click <b>Connect CCTV</b> to view<br>the camera feed</div>
+          <img id="adm-cctv-img" alt="CCTV feed" style="display:none; width:100%; border-radius:12px; object-fit:cover;" />
+          <canvas id="adm-motion-canvas" style="display:none;"></canvas>
+          <div class="motion-indicator" id="adm-motion-indicator">● Monitoring</div>
         </div>
-        <div id="motion-container"><div class="no-data">Loading…</div></div>
+        <div class="cam-controls" style="margin-top:1rem;">
+          <button class="cam-btn cam-btn-green" onclick="admConnectCctv()">▶ Connect CCTV</button>
+          <button class="cam-btn cam-btn-red"   onclick="admDisconnectCctv()">■ Disconnect CCTV</button>
+        </div>
+        <div id="adm-cctv-feedback" style="margin-top:0.8rem; font-size:0.9rem; color:rgba(255,255,255,0.45);"></div>
+        <p id="adm-cam-status"></p>
       </div>
+
+
     </div>
   </div>
 </div>
@@ -1698,11 +1727,12 @@ ADMIN_HTML = f"""
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     document.getElementById('view-' + name).classList.add('active');
     document.getElementById('nav-' + name).classList.add('active');
-    const titles = {{ users: 'User Management', logs: 'Login Logs', motion: 'Motion Events' }};
+    const titles = {{ users: 'User Management', logs: 'Login Logs', motion: 'Motion Events', camera: 'Camera' }};
     document.getElementById('page-title').textContent = titles[name];
     if (name === 'users')  loadUsers();
     if (name === 'logs')   loadLogs();
     if (name === 'motion') loadMotion();
+    if (name === 'camera') admLoadMotionEvents();
   }}
 
   function esc(s) {{ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }}
@@ -1812,6 +1842,194 @@ ADMIN_HTML = f"""
         <tbody>${{rows}}</tbody></table>`;
     }} catch(e) {{
       document.getElementById('motion-container').innerHTML = '<div class="no-data">⚠️ Failed to load events.</div>';
+    }}
+  }}
+
+  // ── Admin Camera / CCTV ──
+  const ADM_CCTV_STREAM_URL = '{cctv_remote_url()}';
+  const ADM_CCTV_PROXY_PATH = '/api/cctv/stream';
+  const ADM_MOTION_THRESHOLD = 30;
+  const ADM_MOTION_MIN_PCT   = 0.8;
+  const ADM_MOTION_COOLDOWN  = 4000;
+
+  let admCctvConnected = false;
+  let admMotionTimer   = null;
+  let admPrevPixels    = null;
+  let admMotionActive  = false;
+  let admLastMotionLog = 0;
+  let admEventsToday   = 0;
+  let admEventsTotal   = 0;
+
+  function admConnectCctv() {{
+    admDisconnectCctv();
+    const img      = document.getElementById('adm-cctv-img');
+    const feedback = document.getElementById('adm-cctv-feedback');
+
+    feedback.textContent = 'Connecting to CCTV…';
+    feedback.style.color = 'rgba(255,255,255,0.45)';
+    document.getElementById('adm-cam-status').textContent = '⏳ Connecting…';
+
+    function onConnected() {{
+      img.style.display = 'block';
+      admCctvConnected = true;
+      document.getElementById('adm-cam-placeholder').style.display = 'none';
+      document.getElementById('adm-stat-cam').textContent = 'Live';
+      document.getElementById('adm-stat-cam').style.color = '#34D399';
+      document.getElementById('adm-cam-status').textContent = '🟢 CCTV feed connected.';
+      document.getElementById('adm-cam-status').style.color = '#34D399';
+      feedback.textContent = 'CCTV connected.';
+      feedback.style.color = '#34D399';
+      document.getElementById('adm-motion-indicator').className = 'motion-indicator visible ok';
+      document.getElementById('adm-motion-indicator').textContent = '● Monitoring';
+      admPrevPixels = null;
+      admStartMotionDetection();
+    }}
+
+    function onFailed() {{
+      img.style.display = 'none';
+      admCctvConnected = false;
+      document.getElementById('adm-cam-placeholder').style.display = 'block';
+      document.getElementById('adm-cam-status').textContent = '🔴 Could not load CCTV stream.';
+      document.getElementById('adm-cam-status').style.color = '#FCA5A5';
+      feedback.textContent = 'Could not load CCTV. Is cloudflared running?';
+      feedback.style.color = '#FCA5A5';
+    }}
+
+    let attempt = 0;
+    img.onload  = onConnected;
+    img.onerror = () => {{
+      attempt += 1;
+      if (attempt === 1) {{
+        feedback.textContent = 'Trying direct tunnel URL…';
+        img.src = ADM_CCTV_STREAM_URL + '?t=' + Date.now();
+      }} else if (attempt === 2) {{
+        feedback.textContent = 'Trying server proxy…';
+        img.src = ADM_CCTV_PROXY_PATH + '?t=' + Date.now();
+      }} else {{
+        onFailed();
+      }}
+    }};
+    img.src = ADM_CCTV_PROXY_PATH + '?t=' + Date.now();
+  }}
+
+  function admDisconnectCctv() {{
+    if (admMotionTimer) {{ clearInterval(admMotionTimer); admMotionTimer = null; }}
+    admPrevPixels    = null;
+    admMotionActive  = false;
+    const img      = document.getElementById('adm-cctv-img');
+    const feedback = document.getElementById('adm-cctv-feedback');
+    img.onload  = null;
+    img.onerror = null;
+    img.src = '';
+    img.style.display = 'none';
+    admCctvConnected = false;
+    document.getElementById('adm-cam-placeholder').style.display = 'block';
+    document.getElementById('adm-cam-status').textContent = '⏹ CCTV disconnected.';
+    document.getElementById('adm-cam-status').style.color = 'rgba(255,255,255,0.4)';
+    document.getElementById('adm-stat-cam').textContent   = 'Offline';
+    document.getElementById('adm-stat-cam').style.color   = '#FCA5A5';
+    document.getElementById('adm-motion-indicator').className = 'motion-indicator';
+    document.getElementById('adm-stat-motion').textContent = '—';
+    document.getElementById('adm-stat-motion').style.color = '';
+    feedback.textContent = 'CCTV disconnected.';
+    feedback.style.color = 'rgba(255,255,255,0.4)';
+  }}
+
+  function admStartMotionDetection() {{
+    const img    = document.getElementById('adm-cctv-img');
+    const canvas = document.getElementById('adm-motion-canvas');
+    const W = 160, H = 120;
+    canvas.width  = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    if (admMotionTimer) clearInterval(admMotionTimer);
+    admMotionTimer = setInterval(() => {{
+      if (!admCctvConnected || !img.complete || !img.naturalWidth) return;
+      ctx.drawImage(img, 0, 0, W, H);
+      const frame = ctx.getImageData(0, 0, W, H).data;
+
+      if (!admPrevPixels) {{ admPrevPixels = frame.slice(); return; }}
+
+      let changed = 0;
+      const total = W * H;
+      for (let i = 0; i < frame.length; i += 4) {{
+        const dr = Math.abs(frame[i]   - admPrevPixels[i]);
+        const dg = Math.abs(frame[i+1] - admPrevPixels[i+1]);
+        const db = Math.abs(frame[i+2] - admPrevPixels[i+2]);
+        if (dr > ADM_MOTION_THRESHOLD || dg > ADM_MOTION_THRESHOLD || db > ADM_MOTION_THRESHOLD) changed++;
+      }}
+      admPrevPixels = frame.slice();
+
+      const pct      = (changed / total) * 100;
+      const detected = pct >= ADM_MOTION_MIN_PCT;
+      const ind      = document.getElementById('adm-motion-indicator');
+      const stat     = document.getElementById('adm-stat-motion');
+
+      if (detected) {{
+        ind.className   = 'motion-indicator visible alert';
+        ind.textContent = '⚠ MOTION DETECTED';
+        stat.textContent  = '⚠ Motion';
+        stat.style.color  = '#FCA5A5';
+
+        if (!admMotionActive) {{
+          admMotionActive = true;
+        }}
+
+        const now = Date.now();
+        if (now - admLastMotionLog > ADM_MOTION_COOLDOWN) {{
+          admLastMotionLog = now;
+          admLogMotionEvent();
+        }}
+      }} else {{
+        ind.className   = 'motion-indicator visible ok';
+        ind.textContent = '● Monitoring';
+        stat.textContent  = 'Clear';
+        stat.style.color  = '#34D399';
+        admMotionActive   = false;
+      }}
+    }}, 200);
+  }}
+
+  async function admLogMotionEvent() {{
+    const now = new Date().toISOString().replace('T',' ').substring(0,19);
+    try {{
+      await fetch('/api/motion/log', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ start_time: now, end_time: now, duration_seconds: 0 }})
+      }});
+      admEventsTotal++;
+      admEventsToday++;
+      document.getElementById('adm-stat-today').textContent = admEventsToday;
+      document.getElementById('adm-stat-total').textContent = admEventsTotal;
+    }} catch(e) {{}}
+  }}
+
+  async function admLoadMotionEvents() {{
+    document.getElementById('adm-motion-log').innerHTML = '<div class="no-data">Loading…</div>';
+    try {{
+      const data   = await fetch('/api/motion/events?limit=200').then(r => r.json());
+      admEventsToday = data.today_count ?? 0;
+      admEventsTotal = data.total ?? 0;
+      document.getElementById('adm-stat-today').textContent = admEventsToday;
+      document.getElementById('adm-stat-total').textContent = admEventsTotal;
+      if (!data.events.length) {{
+        document.getElementById('adm-motion-log').innerHTML = '<div class="no-data">No motion events yet.</div>';
+        return;
+      }}
+      const rows = data.events.map(e => `
+        <tr>
+          <td style="color:rgba(255,255,255,0.3);font-size:0.78rem;">${{e.id}}</td>
+          <td>${{esc(e.start_time)}}</td>
+          <td>${{e.end_time ? esc(e.end_time) : '<span style="opacity:0.4">ongoing</span>'}}</td>
+          <td>${{e.duration_seconds != null ? e.duration_seconds.toFixed(2) + 's' : '—'}}</td>
+        </tr>`).join('');
+      document.getElementById('adm-motion-log').innerHTML = `
+        <table><thead><tr><th>#</th><th>Start Time</th><th>End Time</th><th>Duration</th></tr></thead>
+        <tbody>${{rows}}</tbody></table>`;
+    }} catch(e) {{
+      document.getElementById('adm-motion-log').innerHTML = '<div class="no-data">⚠️ Failed to load events.</div>';
     }}
   }}
 
